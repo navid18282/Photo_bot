@@ -2,3 +2,10 @@ telebot
 opencv-python
 numpy
 rembg
+onnxruntime
+onnxruntime-gpu
+torch
+torchvision
+torchaudio
+numpy
+Pillow
