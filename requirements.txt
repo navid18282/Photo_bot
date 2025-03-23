@@ -4,3 +4,4 @@ numpy
 rembg
 onnxruntime
 flask
+pillow
