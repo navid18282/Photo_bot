@@ -11,7 +11,7 @@ TOKEN = "7823908641:AAH-J7d1CZ3WOgMeolll8gavXsz6JqBk_A8"
 
 # آدرس نهایی سرویس در Render (در پایان دیپلوی بهت می‌دهد)
 # مثلاً: "https://photo-bot-xxxxx.onrender.com/"
-WEBHOOK_URL = "https://نام-سایت-شما.onrender.com/"
+WEBHOOK_URL = "https://photo-bot.onrender.com/"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -119,4 +119,8 @@ def sharpen_image(user_id, file_path):
 if __name__ == "__main__":
     # اجرا روی پورت تعیین‌شده توسط Render یا پورت 5000 به‌صورت پیش‌فرض
     port = int(os.environ.get("PORT", 5000))
+    
+    bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
+
     app.run(host="0.0.0.0", port=port)
