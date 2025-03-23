@@ -6,17 +6,22 @@ from rembg import remove
 from flask import Flask, request
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-TOKEN = "توکن خود را اینجا بگذارید"  # توکن ربات
-WEBHOOK_URL = "https://نام-سایت-شما.onrender.com/"  # لینک سایت شما در Render
+# توکن واقعی ربات تلگرام
+TOKEN = "7823908641:AAH-J7d1CZ3WOgMeolll8gavXsz6JqBk_A8"
+
+# آدرس نهایی سرویس در Render (در پایان دیپلوی بهت می‌دهد)
+# مثلاً: "https://photo-bot-xxxxx.onrender.com/"
+WEBHOOK_URL = "https://نام-سایت-شما.onrender.com/"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# ساخت پوشه برای ذخیره تصاویر
+# ساخت پوشه برای ذخیره تصاویر (در صورت وجود نداشتن)
 if not os.path.exists("images"):
     os.makedirs("images")
 
-user_images = {}  # ذخیره مسیر عکس‌های کاربران
+# دیکشنری برای نگه‌داری مسیر عکس‌های آخر هر کاربر
+user_images = {}
 
 @app.route("/", methods=["GET"])
 def home():
@@ -24,11 +29,12 @@ def home():
 
 @app.route("/", methods=["POST"])
 def receive_update():
+    # دریافت آپدیت تلگرام از طریق وبهوک
     update = request.get_data().decode("utf-8")
     bot.process_new_updates([telebot.types.Update.de_json(update)])
     return "!", 200
 
-# تنظیم Webhook
+# حذف وبهوک قبلی و تنظیم وبهوک جدید
 bot.remove_webhook()
 bot.set_webhook(url=WEBHOOK_URL)
 
@@ -38,7 +44,11 @@ def send_welcome(message):
     markup.add(InlineKeyboardButton("✨ حذف پس‌زمینه", callback_data="remove_bg"))
     markup.add(InlineKeyboardButton("🔍 افزایش وضوح", callback_data="sharpen"))
     
-    bot.send_message(message.chat.id, "سلام! لطفاً یک عکس ارسال کنید، سپس یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
+    bot.send_message(
+        message.chat.id,
+        "سلام! لطفاً یک عکس ارسال کنید، سپس یکی از گزینه‌ها را انتخاب کنید:",
+        reply_markup=markup
+    )
 
 @bot.message_handler(content_types=['photo'])
 def save_photo(message):
@@ -47,7 +57,6 @@ def save_photo(message):
     downloaded_file = bot.download_file(file_info.file_path)
 
     file_path = f"images/{message.chat.id}.jpg"
-    
     with open(file_path, "wb") as file:
         file.write(downloaded_file)
 
@@ -57,7 +66,11 @@ def save_photo(message):
     markup.add(InlineKeyboardButton("✨ حذف پس‌زمینه", callback_data="remove_bg"))
     markup.add(InlineKeyboardButton("🔍 افزایش وضوح", callback_data="sharpen"))
     
-    bot.send_message(message.chat.id, "✅ عکس دریافت شد. حالا یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
+    bot.send_message(
+        message.chat.id,
+        "✅ عکس دریافت شد. حالا یکی از گزینه‌ها را انتخاب کنید:",
+        reply_markup=markup
+    )
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
@@ -90,9 +103,11 @@ def remove_background(user_id, file_path):
 def sharpen_image(user_id, file_path):
     img = cv2.imread(file_path)
 
-    kernel = np.array([[0, -1, 0],
-                       [-1, 5, -1],
-                       [0, -1, 0]])
+    kernel = np.array([
+        [0, -1, 0],
+        [-1, 5, -1],
+        [0, -1, 0]
+    ])
 
     sharpened = cv2.filter2D(img, -1, kernel)
     output_path = f"images/{user_id}_sharpened.jpg"
@@ -102,4 +117,6 @@ def sharpen_image(user_id, file_path):
         bot.send_photo(user_id, sharp_file)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # اجرا روی پورت تعیین‌شده توسط Render یا پورت 5000 به‌صورت پیش‌فرض
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
