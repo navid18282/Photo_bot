@@ -2,9 +2,19 @@ import telebot
 import cv2
 import numpy as np
 from rembg import remove
+from flask import Flask
+from PIL import Image
+import io
+import os
 
 TOKEN = "7823991986:AAEZ4VRH9D6f-XBPEJC2XZPpaoy31Zzc1ek"
 bot = telebot.TeleBot(TOKEN)
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -14,7 +24,6 @@ def send_welcome(message):
                           "/remove_bg - حذف پس‌زمینه 🔄\n"
                           "/sharpen - افزایش وضوح 🔍")
 
-# ذخیره عکس دریافتی
 def save_photo(message):
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
@@ -23,7 +32,6 @@ def save_photo(message):
     with open("input.jpg", "wb") as file:
         file.write(downloaded_file)
 
-# کارتونی کردن عکس
 @bot.message_handler(commands=['cartoon'])
 def cartoonize_image(message):
     save_photo(message)
@@ -41,23 +49,20 @@ def cartoonize_image(message):
     with open("cartoon.jpg", "rb") as cartoon_file:
         bot.send_photo(message.chat.id, cartoon_file)
 
-# حذف پس‌زمینه عکس
 @bot.message_handler(commands=['remove_bg'])
 def remove_background(message):
     save_photo(message)
 
     with open("input.jpg", "rb") as inp_file:
-        img = inp_file.read()
+        img = Image.open(io.BytesIO(inp_file.read()))
+    
+    output = remove(img)  # حذف پس‌زمینه
 
-    output = remove(img)  # حذف پس‌زمینه با rembg
-
-    with open("no_bg.png", "wb") as out_file:
-        out_file.write(output)
+    output.save("no_bg.png")  # ذخیره عکس جدید
 
     with open("no_bg.png", "rb") as final_file:
         bot.send_photo(message.chat.id, final_file)
 
-# افزایش وضوح (Sharpening)
 @bot.message_handler(commands=['sharpen'])
 def sharpen_image(message):
     save_photo(message)
@@ -73,4 +78,11 @@ def sharpen_image(message):
     with open("sharpened.jpg", "rb") as sharp_file:
         bot.send_photo(message.chat.id, sharp_file)
 
-bot.polling()
+import threading
+def run_bot():
+    bot.polling()
+
+threading.Thread(target=run_bot, daemon=True).start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
