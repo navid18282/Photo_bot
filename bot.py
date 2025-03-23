@@ -117,10 +117,9 @@ def sharpen_image(user_id, file_path):
         bot.send_photo(user_id, sharp_file)
 
 if __name__ == "__main__":
-    # اجرا روی پورت تعیین‌شده توسط Render یا پورت 5000 به‌صورت پیش‌فرض
+    # پورت 5000 به‌صورت پیش‌فرض، اجرا روی پورت تعیین‌شده توسط Render
     port = int(os.environ.get("PORT", 5000))
-    
-    bot.remove_webhook()
-bot.set_webhook(url=WEBHOOK_URL)
 
-    app.run(host="0.0.0.0", port=port)
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL)
+    app.run(host="0.0.0.0", port=port)  # فاصله اضافی حذف شد ✅
