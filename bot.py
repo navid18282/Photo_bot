@@ -1,25 +1,36 @@
 import telebot
 import cv2
 import numpy as np
+import os
 from rembg import remove
+from flask import Flask, request
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from flask import Flask
-import threading
 
-TOKEN = "7823908641:AAH-J7d1CZ3WOgMeolll8gavXsz6JqBk_A8"  # توکن ربات شما
+TOKEN = "توکن خود را اینجا بگذارید"  # توکن ربات
+WEBHOOK_URL = "https://نام-سایت-شما.onrender.com/"  # لینک سایت شما در Render
+
 bot = telebot.TeleBot(TOKEN)
-
 app = Flask(__name__)
 
-@app.route('/')
+# ساخت پوشه برای ذخیره تصاویر
+if not os.path.exists("images"):
+    os.makedirs("images")
+
+user_images = {}  # ذخیره مسیر عکس‌های کاربران
+
+@app.route("/", methods=["GET"])
 def home():
-    return "Bot is running!"
+    return "ربات در حال اجرا است!"
 
-def run_flask():
-    app.run(host="0.0.0.0", port=10000)
+@app.route("/", methods=["POST"])
+def receive_update():
+    update = request.get_data().decode("utf-8")
+    bot.process_new_updates([telebot.types.Update.de_json(update)])
+    return "!", 200
 
-# ذخیره مسیر آخرین عکس دریافتی از هر کاربر
-user_images = {}
+# تنظیم Webhook
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -29,7 +40,6 @@ def send_welcome(message):
     
     bot.send_message(message.chat.id, "سلام! لطفاً یک عکس ارسال کنید، سپس یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
 
-# ذخیره عکس دریافتی
 @bot.message_handler(content_types=['photo'])
 def save_photo(message):
     file_id = message.photo[-1].file_id
@@ -49,12 +59,10 @@ def save_photo(message):
     
     bot.send_message(message.chat.id, "✅ عکس دریافت شد. حالا یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
 
-# هندل کردن دکمه‌های شیشه‌ای
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     user_id = call.message.chat.id
 
-    # بررسی اینکه آیا کاربر قبلاً عکسی ارسال کرده یا نه
     if user_id not in user_images:
         bot.send_message(user_id, "❌ لطفاً ابتدا یک عکس ارسال کنید و سپس دکمه را بزنید!")
         return
@@ -66,7 +74,6 @@ def handle_buttons(call):
     elif call.data == "sharpen":
         sharpen_image(user_id, file_path)
 
-# حذف پس‌زمینه عکس
 def remove_background(user_id, file_path):
     with open(file_path, "rb") as inp_file:
         img = inp_file.read()
@@ -80,7 +87,6 @@ def remove_background(user_id, file_path):
     with open(output_path, "rb") as final_file:
         bot.send_photo(user_id, final_file)
 
-# افزایش وضوح عکس
 def sharpen_image(user_id, file_path):
     img = cv2.imread(file_path)
 
@@ -95,8 +101,5 @@ def sharpen_image(user_id, file_path):
     with open(output_path, "rb") as sharp_file:
         bot.send_photo(user_id, sharp_file)
 
-# اجرای Flask در یک ترد جداگانه
-threading.Thread(target=run_flask).start()
-
-# اجرای ربات تلگرام
-bot.polling()
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
