@@ -1,0 +1,4 @@
+telebot
+opencv-python
+numpy
+rembg
