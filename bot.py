@@ -18,53 +18,70 @@ def home():
 def run_flask():
     app.run(host="0.0.0.0", port=10000)
 
+# ذخیره مسیر آخرین عکس دریافتی از هر کاربر
+user_images = {}
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("✨ حذف پس‌زمینه", callback_data="remove_bg"))
     markup.add(InlineKeyboardButton("🔍 افزایش وضوح", callback_data="sharpen"))
     
-    bot.send_message(message.chat.id, "سلام! یک عکس بفرست و سپس یکی از گزینه‌ها را انتخاب کن:", reply_markup=markup)
+    bot.send_message(message.chat.id, "سلام! لطفاً یک عکس ارسال کنید، سپس یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
 
 # ذخیره عکس دریافتی
+@bot.message_handler(content_types=['photo'])
 def save_photo(message):
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
     downloaded_file = bot.download_file(file_info.file_path)
 
-    with open("input.jpg", "wb") as file:
+    file_path = f"images/{message.chat.id}.jpg"
+    
+    with open(file_path, "wb") as file:
         file.write(downloaded_file)
 
-    return "input.jpg"
+    user_images[message.chat.id] = file_path
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("✨ حذف پس‌زمینه", callback_data="remove_bg"))
+    markup.add(InlineKeyboardButton("🔍 افزایش وضوح", callback_data="sharpen"))
+    
+    bot.send_message(message.chat.id, "✅ عکس دریافت شد. حالا یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
 
 # هندل کردن دکمه‌های شیشه‌ای
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
-    if call.message.photo:
-        file_path = save_photo(call.message)
-        
-        if call.data == "remove_bg":
-            remove_background(call.message, file_path)
-        elif call.data == "sharpen":
-            sharpen_image(call.message, file_path)
-    else:
-        bot.send_message(call.message.chat.id, "لطفاً اول یک عکس بفرستید!")
+    user_id = call.message.chat.id
+
+    # بررسی اینکه آیا کاربر قبلاً عکسی ارسال کرده یا نه
+    if user_id not in user_images:
+        bot.send_message(user_id, "❌ لطفاً ابتدا یک عکس ارسال کنید و سپس دکمه را بزنید!")
+        return
+
+    file_path = user_images[user_id]
+
+    if call.data == "remove_bg":
+        remove_background(user_id, file_path)
+    elif call.data == "sharpen":
+        sharpen_image(user_id, file_path)
 
 # حذف پس‌زمینه عکس
-def remove_background(message, file_path):
+def remove_background(user_id, file_path):
     with open(file_path, "rb") as inp_file:
         img = inp_file.read()
 
     output = remove(img)
 
-    with open("no_bg.png", "wb") as out_file:
+    output_path = f"images/{user_id}_no_bg.png"
+    with open(output_path, "wb") as out_file:
         out_file.write(output)
 
-    with open("no_bg.png", "rb") as final_file:
-        bot.send_photo(message.chat.id, final_file)
+    with open(output_path, "rb") as final_file:
+        bot.send_photo(user_id, final_file)
 
 # افزایش وضوح عکس
-def sharpen_image(message, file_path):
+def sharpen_image(user_id, file_path):
     img = cv2.imread(file_path)
 
     kernel = np.array([[0, -1, 0],
@@ -72,10 +89,11 @@ def sharpen_image(message, file_path):
                        [0, -1, 0]])
 
     sharpened = cv2.filter2D(img, -1, kernel)
-    cv2.imwrite("sharpened.jpg", sharpened)
+    output_path = f"images/{user_id}_sharpened.jpg"
+    cv2.imwrite(output_path, sharpened)
 
-    with open("sharpened.jpg", "rb") as sharp_file:
-        bot.send_photo(message.chat.id, sharp_file)
+    with open(output_path, "rb") as sharp_file:
+        bot.send_photo(user_id, sharp_file)
 
 # اجرای Flask در یک ترد جداگانه
 threading.Thread(target=run_flask).start()
