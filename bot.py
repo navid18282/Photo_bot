@@ -2,111 +2,69 @@ import telebot
 import cv2
 import numpy as np
 from rembg import remove
-from flask import Flask
-import threading
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# توکن ربات تلگرام
-TOKEN = "ت7528697005:AAE_Cs0dWfmQbCXHpQEzYFDPK2TDrf4CUww"
+TOKEN = "7823908641:AAH-J7d1CZ3WOgMeolll8gavXsz6JqBk_A8"
 bot = telebot.TeleBot(TOKEN)
 
-# سرور Flask برای آنلاین ماندن در Render
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_flask():
-    app.run(host="0.0.0.0", port=8080)
-
-# اجرای Flask در یک ترد جداگانه
-threading.Thread(target=run_flask, daemon=True).start()
-
-# پیام خوش‌آمدگویی
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "سلام! یک عکس بفرست تا پردازشش کنم.\n\n"
-                          "دستورات:\n"
-                          "/cartoon - کارتونی کردن عکس 🎨\n"
-                          "/remove_bg - حذف پس‌زمینه 🔄\n"
-                          "/sharpen - افزایش وضوح 🔍")
+    bot.send_message(message.chat.id, "سلام! لطفاً یک عکس ارسال کنید و سپس یکی از گزینه‌های زیر را انتخاب کنید.")
 
-# ذخیره عکس دریافتی
-def save_photo(message):
-    try:
-        file_id = message.photo[-1].file_id
-        file_info = bot.get_file(file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        with open("input.jpg", "wb") as file:
-            file.write(downloaded_file)
-        return True
-    except Exception as e:
-        bot.reply_to(message, "❌ خطایی رخ داد! دوباره امتحان کن.")
-        print(f"Error in save_photo: {e}")
-        return False
+# دریافت و ذخیره عکس
+@bot.message_handler(content_types=['photo'])
+def receive_photo(message):
+    file_id = message.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
 
-# کارتونی کردن عکس
-@bot.message_handler(commands=['cartoon'])
-def cartoonize_image(message):
-    if not save_photo(message):
+    file_path = f"input_{message.chat.id}.jpg"
+    with open(file_path, "wb") as file:
+        file.write(downloaded_file)
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("✨ حذف پس‌زمینه", callback_data="remove_bg"))
+    markup.add(InlineKeyboardButton("🔍 افزایش وضوح", callback_data="sharpen"))
+
+    bot.send_message(message.chat.id, "عکس دریافت شد. یکی از گزینه‌ها را انتخاب کنید:", reply_markup=markup)
+
+# پردازش دکمه‌های شیشه‌ای
+@bot.callback_query_handler(func=lambda call: call.data in ["remove_bg", "sharpen"])
+def handle_buttons(call):
+    if not call.message.reply_to_message or not call.message.reply_to_message.photo:
+        bot.send_message(call.message.chat.id, "❌ لطفاً ابتدا یک عکس ارسال کنید و سپس دکمه را بزنید!")
         return
 
-    img = cv2.imread("input.jpg")
-    if img is None:
-        bot.reply_to(message, "❌ عکس نامعتبر است!")
-        return
+    file_path = f"input_{call.message.chat.id}.jpg"
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.medianBlur(gray, 5)
-    edges = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 9)
-    color = cv2.bilateralFilter(img, 9, 300, 300)
-    cartoon = cv2.bitwise_and(color, color, mask=edges)
-
-    cv2.imwrite("cartoon.jpg", cartoon)
-    with open("cartoon.jpg", "rb") as cartoon_file:
-        bot.send_photo(message.chat.id, cartoon_file)
+    if call.data == "remove_bg":
+        remove_background(call.message, file_path)
+    elif call.data == "sharpen":
+        sharpen_image(call.message, file_path)
 
 # حذف پس‌زمینه عکس
-@bot.message_handler(commands=['remove_bg'])
-def remove_background(message):
-    if not save_photo(message):
-        return
+def remove_background(message, file_path):
+    img = cv2.imread(file_path)
+    output = remove(img)
+    output_path = f"no_bg_{message.chat.id}.png"
+    cv2.imwrite(output_path, output)
 
-    try:
-        with open("input.jpg", "rb") as inp_file:
-            img = inp_file.read()
+    with open(output_path, "rb") as final_file:
+        bot.send_photo(message.chat.id, final_file)
 
-        output = remove(img)
-
-        with open("no_bg.png", "wb") as out_file:
-            out_file.write(output)
-
-        with open("no_bg.png", "rb") as final_file:
-            bot.send_photo(message.chat.id, final_file)
-    except Exception as e:
-        bot.reply_to(message, "❌ خطایی در پردازش حذف پس‌زمینه رخ داد!")
-        print(f"Error in remove_background: {e}")
-
-# افزایش وضوح (Sharpening)
-@bot.message_handler(commands=['sharpen'])
-def sharpen_image(message):
-    if not save_photo(message):
-        return
-
-    img = cv2.imread("input.jpg")
-    if img is None:
-        bot.reply_to(message, "❌ عکس نامعتبر است!")
-        return
+# افزایش وضوح عکس
+def sharpen_image(message, file_path):
+    img = cv2.imread(file_path)
 
     kernel = np.array([[0, -1, 0],
                        [-1, 5, -1],
-                       [0, -1, 0]])  # ماتریس شارپنینگ
+                       [0, -1, 0]])
 
     sharpened = cv2.filter2D(img, -1, kernel)
-    cv2.imwrite("sharpened.jpg", sharpened)
+    output_path = f"sharpened_{message.chat.id}.jpg"
+    cv2.imwrite(output_path, sharpened)
 
-    with open("sharpened.jpg", "rb") as sharp_file:
+    with open(output_path, "rb") as sharp_file:
         bot.send_photo(message.chat.id, sharp_file)
 
-# اجرای ربات
 bot.polling()
